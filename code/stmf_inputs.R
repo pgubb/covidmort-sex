@@ -21,7 +21,7 @@ stmf_inputs <- dplyr::bind_rows(map(files, clean_up)) %>% filter(Year >= MIN_YEA
 
 unique(pull(stmf_inputs %>% filter(PopCode == "SWE"), Week))
 # Sweden has deaths that are unknown by week - for now ignoring as deaths will be agreggated to the year level 
-View(stmf_inputs %>% filter(PopCode == "NLD"))
+
 
 # Modifications/corrections --------------------------------------------------------
 
@@ -153,7 +153,7 @@ stmf_inputs %>%
     #Age_Int = ifelse(is.na(Age_Int), "(85+]", Age_Int)
   ) -> stmf_db
     
-# Aggregating deaths by Country, Sex and Year
+# Aggregating deaths by Country, Sex, Year and Age 
 
 stmf_db %>% 
   # Aggregating over  age intervals

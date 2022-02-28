@@ -1,7 +1,6 @@
 
 cat("Running model to estimate excess deaths by country, sex, age and year (2020, 2021)")
 
-
 # Running regressions by country and age_group in a nested data frame  --------------------------------------------------------
 
 # DEFINING KEY MODEL FUNCTIONS
@@ -22,7 +21,7 @@ predict_deaths <- function(train_df, test_df) {
   
 }
 
-# RUNNING MODEL 
+# RUNNING MODEL BY COUNTRY, SEX & AGE
 
 stmf_nested_model <- stmf_db %>% filter(Year < 2020) %>% 
   group_by(iso3c, Sex, Age_Int) %>% 
@@ -40,25 +39,50 @@ stmf_preds <- full_join(stmf_nested_model, stmf_nested_full) %>%
     predictions = map2(train_df, test_df, predict_deaths)
   ) %>% unnest(c(test_df, predictions)) 
 
-# Incorporating population data 
+# Calculating excess and all-cause mortality rates  --------------------------------------------------------
 
-stmf_preds %>% 
-  left_join(populations_2020, by = c("iso3c", "Age_Int", "Sex")) %>%
+# Merging in population data
+stmf_excessd <- stmf_preds %>% 
+  left_join(populations_2020, by = c("iso3c", "Age_Int", "Sex")) %>% 
+  select(iso3c, Country, Sex, Age_Int, Age_Lower, Year, Population, Deaths, fit, lwr, upr)
+
+# Aggregating deaths over age by sex to get a "All ages" category by sex
+stmf_excessd %>% 
+  group_by(iso3c, Country, Year, Sex) %>% 
+  summarize(Deaths = sum(Deaths), 
+            fit = sum(fit), 
+            lwr = sum(lwr), 
+            upr = sum(upr), 
+            Population = sum(Population)) %>% 
+  mutate(Age_Int = "All ages", Age_Lower = NA) %>% 
+  bind_rows(stmf_excessd) -> stmf_excessd
+
+# Calculating all cause mortality rates (counter-factual for 2020 and 2021)
+stmf_allcaused <- stmf_excessd %>% 
   left_join(adj_factor_85p, by = c("iso3c", "Sex")) %>% 
   mutate(adjfct_85p = ifelse(Age_Lower %not_in% c(80,85), 1, adjfct_85p)) %>% 
   mutate(
-    Deaths_2019 = max(ifelse(Year == 2019, Deaths, NA), na.rm = TRUE), 
-    # Excess deaths
-    ed_n = Deaths - fit, 
-    # Excess death Mortality rate
-    mr = (ed_n/Population)*1e5, 
+    # All cause deaths: 
+    Deaths = fit, 
+    # Estimated all cause mortality rate
+    mr = (fit/Population)*1e5, 
     # Excess death Mortality rate (adjusting open ended age interval)
     mra = mr*adjfct_85p, 
-    # All-cause mortality rate
-    amr = (fit/Population)*1e5, 
-    amr = amr*adjfct_85p, 
-    source = "Vital statistics (Excess deaths)"
-  ) -> stmf_preds
+    source = "All cause deaths"
+  )
 
+# Calculating excess death mortality rates 
+stmf_excessd %>% 
+  left_join(adj_factor_85p, by = c("iso3c", "Sex")) %>% 
+  mutate(adjfct_85p = ifelse(Age_Lower %not_in% c(80,85), 1, adjfct_85p)) %>% 
+  mutate(
+    # Excess deaths
+    Deaths = Deaths - fit, 
+    # Excess death Mortality rate
+    mr = (Deaths/Population)*1e5, 
+    # Excess death Mortality rate (adjusting open ended age interval)
+    mra = mr*adjfct_85p, 
+    source = "Excess deaths"
+  ) -> stmf_excessd
 
 

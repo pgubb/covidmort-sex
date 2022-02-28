@@ -56,6 +56,20 @@ populations_2020 <- bind_rows(wpp_2020, ukpop_2020) %>%
   summarize(Population = sum(Population)) %>% ungroup() 
 
 
+
+# Getting age shares of total population by sex for USA for age standardization  ---------------------
+# These will be used in a one to many merge to compute age-standardized mortality rates
+
+popshares_byage_USA <- populations_2020 %>% 
+  filter(iso3c == "USA") %>% 
+  group_by(iso3c, Sex) %>% 
+  mutate(
+    Population = ifelse(Population == 0, 1, Population), 
+    popshare_USA = Population/sum(Population)
+  ) %>% 
+  ungroup() %>%
+  select(Sex, Age_Lower, popshare_USA) 
+
 # Calculating the adjustment factor for the open-ended age interval by country and sex ------------
 
 # Getting mortality rates for the US for age groups above the age of 85

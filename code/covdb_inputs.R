@@ -14,7 +14,9 @@ cov_5 <-  read_csv("Output_5.zip",
   # Keeping only national-level data
   filter(Region == "All" | Region == "Hong Kong") %>% 
   # Harmonizing Hong Kong's country name with other datasets
-  mutate(Country = ifelse(Country == "China" & Region == "Hong Kong", "Hong Kong SAR, China", Country))
+  mutate(Country = ifelse(Country == "China" & Region == "Hong Kong", "Hong Kong SAR, China", Country), 
+         Country = ifelse(Country == "Czechia", "Czech Republic", Country), 
+         )
 
 # Countries in COVerAGE database 
 cov_countries_all <- unique(cov_inputs$Country)
@@ -113,7 +115,7 @@ cov_inputs <- cov_inputs %>%
               filter(exposure_2020 > 0.5) %>% 
               filter(exposure_2021 > 0.96)
 
-# Deaths aggregated by country, iso-year and sex  ----------------------------
+# Deaths aggregated by country, iso-year, sex and (age)  ----------------------------
 
 aggoverage_covdb <- function(data, id, time, age, sex, popdata) {
   
@@ -134,15 +136,24 @@ aggoverage_covdb <- function(data, id, time, age, sex, popdata) {
 
 }
 
-# Aggregating cumulative deaths over 4 different specification of age group
+# Aggregating cumulative deaths over age and sex
 cov_db <- aggoverage_covdb(cov_inputs, "iso3c", "Year", "Age_Int", "Sex", populations_2020)
 
+# Aggregating cumulative deaths over age to get an "all ages" category by sex
+cov_db %>% 
+  group_by(iso3c, iso2c, PopCode, Country, Year, Sex) %>% 
+  summarize(Deaths = sum(Deaths), 
+            Population = sum(Population)) %>% 
+  mutate(Age_Int = "All ages", Age_Lower = NA) %>% 
+  bind_rows(cov_db) -> cov_db
+
+
 # Computing mortality rates by Sex and Age
-cov_db <- cov_db %>% 
+cov_officiald <- cov_db %>% 
   left_join(cov_exposures_long, by = c("Year", "Country", "Sex")) %>%
   left_join(adj_factor_85p, by = c("iso3c", "Sex")) %>% 
-  mutate(adjfct_85p = ifelse(Age_Lower != 85, 1, adjfct_85p)) %>% 
   mutate(
+    adjfct_85p = ifelse(Age_Lower != 85, 1, adjfct_85p),
     #in_stmf = ifelse(Country %in% c(country_names) , 1, 0), 
     source = "Official COVID-19 deaths", 
     mr = (Deaths/(Population*exposure))*1e5,
