@@ -96,12 +96,12 @@ source("code/stmf_viz_ageints.R")
 #####
 
 include <- stmf_ageints %>% 
-  group_by(Country, Year, Sex) %>% 
+  group_by(PopCode, Country, Year, Sex) %>% 
   filter(row_number()==n()) %>% 
   filter(Sex != "b") %>% 
   select(Country, Year, Sex, min_age_int, max_age_int, age_cutoffs)
 
-for (age in AGE_CUTS) {
+for (age in AGE_CUTS[["PRI"]]) {
   new_col_name <- paste0("cut_", age)
   include <- include %>% 
     mutate(!!sym(new_col_name) := str_detect(age_cutoffs, as.character(age)))
@@ -111,7 +111,7 @@ include %>%
   mutate(
     allints = all(across(starts_with("cut_")))
   ) %>% 
-  group_by(Country, Sex) %>% 
+  group_by(PopCode, Country, Sex) %>% 
   add_count() %>% 
   mutate(
     alltrue = sum(allints), 
@@ -120,7 +120,9 @@ include %>%
   ) -> include
 
 # Vector of countries that meet conditions for age_cut inclusion/exclusion for analysis
-countries_in <- unique(pull(include %>% filter(alltrue == n & min_year < 2020), Country))
+stmf_countries_in <- unique(pull(include %>% filter(alltrue == n & min_year < 2020), Country))
+STMF_COUNTRIES_ISO3C <- unique(pull(include %>% filter(alltrue == n & min_year < 2020), PopCode))
+STMF_COUNTRIES_ISO3C <- maps[["stmf_popcode_to_iso3c"]][STMF_COUNTRIES_ISO3C]
 stmf_excluded_bc_agecutoffs <- unique(pull(include %>% filter(alltrue < n | min_year >= 2020), Country))
 
 sprintf("Countries without desired age cut-offs: %s", paste0(stmf_excluded_bc_agecutoffs, collapse = "; "))
@@ -132,7 +134,7 @@ stmf_inputs %>%
   inner_join(stmf_exposures %>% select(PopCode, Year, Sex, exposure), by = c("PopCode", "Year", "Sex")) %>% 
   filter(exposure > 0.96) %>% 
   # Keeping countries with death counts at desired age cut-offs
-  filter(Country %in% countries_in) %>% 
+  filter(Country %in% stmf_countries_in) %>% 
   group_by(PopCode, Sex, Year, Week) %>%
   # Moving total & unknown deaths by age to new column 
   mutate(
@@ -149,23 +151,10 @@ stmf_inputs %>%
     dist = Deaths / sum(Deaths),
     Deaths = dist * TOT,
     Age = as.integer(Age), 
-    Age_Int = cut(Age, breaks = c(AGE_CUTS, 999), labels = AGE_INT_LABELS, right = FALSE, include.lowest = FALSE, ordered_result = TRUE)
-    #Age_Int = ifelse(is.na(Age_Int), "(85+]", Age_Int)
+    Age_Int = cut(Age, breaks = c(AGE_CUTS[["PRI"]], 999), labels = AGE_LABELS[["PRI"]], right = FALSE, include.lowest = FALSE, ordered_result = TRUE), 
+    Age_Int = as.character(Age_Int),
   ) -> stmf_db
-    
-# Aggregating deaths by Country, Sex, Year and Age 
-
-stmf_db %>% 
-  # Aggregating over  age intervals
-  group_by(iso3c, PopCode, Country, Sex, Year, Age_Int) %>% 
-  summarize(Deaths = sum(Deaths)) %>% 
-  group_by(PopCode, Sex, Age_Int) %>% 
-  mutate(
-    year_num = row_number()
-  ) %>% ungroup() -> stmf_db
-  # Merging Peru and Colombia data
-  #bind_rows(col_inp_ag0, per_inp_ag0, mex_inp_ag0)
-
+   
 
 
 

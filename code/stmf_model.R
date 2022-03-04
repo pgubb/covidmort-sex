@@ -1,6 +1,29 @@
 
 cat("Running model to estimate excess deaths by country, sex, age and year (2020, 2021)")
 
+# Aggregating deaths by Country, Sex, Year and Age & incorporating data from Colombia, Peru, Mexico, Philippines, Brazil, Ecuador, USA
+
+stmf_db %>% 
+  
+  # Aggregating over age intervals
+  group_by(iso3c, PopCode, Country, Sex, Year, Age_Int) %>% 
+  summarize(Deaths = sum(Deaths)) %>% 
+  
+  # Merging in additional data
+  bind_rows(
+    col_db %>% mutate(Age_Int = as.character(Age_Int)), 
+    per_db %>% mutate(Age_Int = as.character(Age_Int)), 
+    mex_db %>% mutate(Age_Int = as.character(Age_Int)), 
+    phl_db %>% mutate(Age_Int = as.character(Age_Int)), 
+    bra_db %>% mutate(Age_Int = as.character(Age_Int)), 
+    ecu_db %>% mutate(Age_Int = as.character(Age_Int)),
+    usa_db %>% mutate(Age_Int = as.character(Age_Int))
+  ) %>% 
+  group_by(iso3c, Sex, Age_Int) %>% 
+  mutate(
+    year_num = row_number()
+  ) %>% ungroup() -> stmf_db
+
 # Running regressions by country and age_group in a nested data frame  --------------------------------------------------------
 
 # DEFINING KEY MODEL FUNCTIONS
@@ -43,8 +66,8 @@ stmf_preds <- full_join(stmf_nested_model, stmf_nested_full) %>%
 
 # Merging in population data
 stmf_excessd <- stmf_preds %>% 
-  left_join(populations_2020, by = c("iso3c", "Age_Int", "Sex")) %>% 
-  select(iso3c, Country, Sex, Age_Int, Age_Lower, Year, Population, Deaths, fit, lwr, upr)
+  left_join(populations_2020_stmf, by = c("iso3c", "Age_Int", "Sex")) %>% 
+  select(iso3c, Country, Sex, Age_Int, Age_Lower, Age_Int_cut, Year, Population, Deaths, fit, lwr, upr)
 
 # Aggregating deaths over age by sex to get a "All ages" category by sex
 stmf_excessd %>% 

@@ -74,3 +74,13 @@ conf_interval <- function(mean, lci, uci) {
   paste0(mean, " (", lci, "-", uci, ")")
 }
 
+bind_rows_with_factor_columns <- function(...) {
+  purrr::pmap_df(list(...), function(...) {
+    cols_to_bind <- list(...)
+    if (all(purrr::map_lgl(cols_to_bind, is.factor))) {
+      forcats::fct_c(cols_to_bind)
+    } else {
+      unlist(cols_to_bind)
+    }
+  })
+}

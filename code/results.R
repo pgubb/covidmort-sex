@@ -11,14 +11,37 @@ age_int_levels <- c("[0,45)", "[45,55)", "[55,65)", "[65,75)", "[75,85)", "(85+]
 mortality_rates <- stmf_excessd %>% 
   bind_rows(cov_officiald, stmf_allcaused) %>%
   filter(Year >= 2020) %>% 
-  dplyr::select(iso3c, PopCode, Year, Sex, Age_Int, Age_Lower, Deaths, Population, mr, mra, source) %>%
+  dplyr::select(iso3c, Country, Year, Sex, Age_Int, Age_Lower, Deaths, Population, mr, mra, source, Age_Int_cut) %>%
   mutate(
-    Age_Int = factor(Age_Int, levels = age_int_levels, ordered = TRUE), 
-    Sex_name = ifelse(Sex == "m", "Males", "Females"), 
+    #Age_Int = factor(Age_Int, levels = age_int_levels, ordered = TRUE), 
+    Sex_name = ifelse(Sex == "m", "Males", ifelse(Sex == "f", "Females", "Both sexes")), 
     Year = factor(Year, levels = c("2020", "2021"), ordered = TRUE)
   ) %>% ungroup() 
 
 write_csv(mortality_rates, file = "data/covidmort-sex-results.csv")
+
+# Age standardized mortality rates 
+
+asmr <- mortality_rates %>% 
+  filter(Age_Int != "All ages" & source != "All cause deaths") %>% 
+  left_join(popUSA_shares, by = c("Age_Int_cut", "Sex", "Age_Lower")) %>% 
+  mutate(
+    asmr = mr*popshare_USA
+  ) %>% 
+  group_by(iso3c, Country, Year, Sex, source) %>% 
+  summarize(
+    asmr = sum(asmr)
+  ) %>% 
+  mutate(
+    Age_Int = "All ages"
+  ) %>% 
+  ungroup() 
+
+mortality_rates <- mortality_rates %>% left_join(asmr %>% select(-Country), by = c("iso3c", "Year", "Sex", "Age_Int", "source"))
+
+write_csv(mortality_rates, file = "data/covidmort-sex-results.csv")
+
+
 
 # Chart styling 
 
@@ -31,7 +54,7 @@ color_pal <- list(
 
 # Experimental 
 
-ggplot(data = mortality_rates %>% filter(source != "All cause deaths" & Year == 2020), 
+ggplot(data = mortality_rates %>% filter(source != "All cause deaths" & Age_Int == "All ages" & Year == 2020), 
        aes(x = Age_Int, 
            y = Country, 
            fill = mr)) +
@@ -39,6 +62,36 @@ ggplot(data = mortality_rates %>% filter(source != "All cause deaths" & Year == 
   geom_tile() + 
   scale_fill_viridis_c() + 
   theme_custom()
+
+chart_df <- mortality_rates %>% 
+              filter(source != "All cause deaths" & Age_Int != "All ages" & Sex != "b") %>% 
+              mutate(Age_Int = factor(Age_Int, levels = age_int_levels, ordered = TRUE)) %>%
+              left_join(gdppcap, by = c("iso3c"))
+
+
+labs = list(
+  mti = "Mortality rates by age", 
+  y = "Mortality rate (per 100k)", 
+  x = "Age interval lower bound"
+)
+
+ggplot(data = chart_df %>% filter(Age_Lower > 0), 
+       aes(x = Age_Lower, 
+           y = mr, 
+           color = Sex_name)) +
+  facet_grid(rows=vars(Year), cols = vars(source), switch = "y") +  
+  geom_point() + 
+  geom_smooth(se = FALSE) + 
+  guides(color = guide_legend(title = "")) +
+  scale_color_manual(values = color_pal[["gender"]]) +
+  labs(
+    y = labs[["y"]],  
+    x = labs[["x"]], 
+    title = labs[["mti"]]
+  ) +
+  theme_custom(legend.position = "top", legend.direction = "horizontal", scale_f = 1.3)
+
+ggsave("charts/FIG_mr_byagegroup_year.png", width = 12, height = 9, dpi = 300)
 
 
 # FIGURE 1/2: By country: Cumulative crude COVID-19 mortality rate for men and women (excess and official) ----------
@@ -222,26 +275,19 @@ ggsave("charts/FIG_11_1v2_cmr_scatter.png", width = 12, height = 7, dpi = 300)
 
 # FIGURE 5/6: Cumulative age-standardized COVID-19 mortality rate for men and women, and sex ratio -----------
 
-asmr <- mortality_rates %>% 
-              filter(Age_Int != "All ages" & source != "All cause deaths") %>% 
-              left_join(popshares_byage_USA, by = c("Sex", "Age_Lower")) %>% 
-              mutate(
-                mr = mr*popshare_USA
-              ) %>% 
-              group_by(iso3c, Country, Year, Sex, source) %>% 
-              summarize(
-                mr = sum(mr)
-              ) %>% 
-              mutate(
-                Sex_name = ifelse(Sex == "m", "Males", "Females")
-              ) %>% ungroup()
+asmr_sexgap <- asmr %>% 
+  pivot_wider(id_cols = c(iso3c, Year, source), values_from = asmr, names_from = Sex, names_prefix = "asmr_") %>% 
+  mutate(
+    asmr_gap = asmr_m - asmr_f
+  ) 
 
-overall_mr <- asmr %>% 
-  filter(Sex == "b") %>% select(iso3c, Year, source, mr_b = mr)
-
-asmr %>% 
+chart_df <- asmr %>% 
   filter(Sex != "b") %>% 
-  inner_join(overall_mr, by = c("iso3c", "Year", "source")) -> chart_df
+  mutate(
+    Sex_name = ifelse(Sex == "m", "Males", ifelse(Sex == "f", "Females", "Both sexes"))
+  ) %>% 
+  inner_join(asmr_sexgap, by = c("iso3c", "Year", "source")) %>% 
+  filter(Country != "Puerto Rico")
 
 # 2020 
 
@@ -251,8 +297,8 @@ labs = list(
 )
 
 p1 <- ggplot(data = chart_df %>% filter(Year == 2020), 
-             aes(x = mr, 
-                 y = fct_reorder(Country, mr_b), 
+             aes(x = asmr, 
+                 y = fct_reorder(Country, asmr_gap, na.rm = TRUE), 
                  color = Sex_name, 
                  group = iso3c)) +
   facet_wrap(~source, ncol = 2) + 
@@ -265,8 +311,8 @@ p1 <- ggplot(data = chart_df %>% filter(Year == 2020),
     x = labs[["x"]], 
     title = labs[["mti"]]
   ) + 
-  theme_custom() + 
-  theme(legend.position = "top", legend.direction = "horizontal")
+  theme_custom(scale_f = 1.2) + 
+  theme(legend.position = "top", legend.direction = "horizontal", plot.title = element_text(hjust = 0.5))
 
 # 2021
 
@@ -276,8 +322,8 @@ labs = list(
 )
 
 p2 <- ggplot(data = chart_df %>% filter(Year == 2021), 
-             aes(x = mr, 
-                 y = fct_reorder(Country, mr_b), 
+             aes(x = asmr, 
+                 y = fct_reorder(Country, asmr_gap, na.rm = TRUE), 
                  color = Sex_name, 
                  group = iso3c)) +
   facet_wrap(~source, ncol = 2) + 
@@ -290,9 +336,8 @@ p2 <- ggplot(data = chart_df %>% filter(Year == 2021),
     x = labs[["x"]], 
     title = labs[["mti"]]
   ) + 
-  theme_custom() + 
-  theme(legend.position = "top", legend.direction = "horizontal")
-
+  theme_custom(scale_f = 1.2) + 
+  theme(legend.position = "top", legend.direction = "horizontal", plot.title = element_text(hjust = 0.5))
 
 
 p1 + p2 + 
@@ -301,7 +346,41 @@ p1 + p2 +
     caption = "Source: Author's calculations using STMF and COVerAGE databases"
   ) + plot_layout(guides = 'collect') & theme(legend.position = "top") 
 
-ggsave("charts/FIG_5_6_asmr_by_cntry_sex_year.png", width = 12, height = 7, dpi = 300)
+ggsave("charts/FIG_5_6_asmr_by_cntry_sex_year.png", width = 12, height = 12, dpi = 300)
+
+# Version against GDP 
+
+chart_df <- chart_df %>% left_join(gdppcap, by = c("iso3c")) 
+
+
+labs = list(
+  mti = "Age standardized mortality rate versus GNI per capita, by sex", 
+  y = "Age standardized mortality rate (per 100k)", 
+  x = "GNI per capita (PPP)"
+)
+
+ggplot(data = chart_df, 
+       aes(x = gni_pcap_ppp, 
+           y = asmr, 
+           color = Sex_name)
+       ) + 
+  #facet_wrap(~source, ncol = 2) + 
+  facet_grid(rows=vars(Year), cols = vars(source), switch = "y") + 
+  geom_smooth(se = FALSE) + 
+  geom_line(aes(group = iso3c), color = "grey80") +
+  geom_point(size = 2) + 
+  guides(color = guide_legend(title = "")) + 
+  scale_color_manual(values = color_pal[["gender"]]) +
+  scale_x_continuous(labels = scales::label_dollar()) +
+  labs(
+    y = labs[["y"]],  
+    x = labs[["x"]], 
+    title = labs[["mti"]]
+  ) + 
+  theme_custom(legend.position = "top", legend.direction = "horizontal", scale_f = 1.3)
+
+ggsave("charts/FIG_5_6_asmr_v_gnipcap.png", width = 12, height = 9, dpi = 300)
+
 
 # Scatter plot 
 

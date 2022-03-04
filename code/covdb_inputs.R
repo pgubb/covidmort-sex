@@ -19,7 +19,7 @@ cov_5 <-  read_csv("Output_5.zip",
          )
 
 # Countries in COVerAGE database 
-cov_countries_all <- unique(cov_inputs$Country)
+cov_countries_all <- unique(cov_5$Country)
 cov_countries_n <- length(cov_countries_all)
 
 # Identifying countries without any death data (these will be excluded)
@@ -106,12 +106,12 @@ cov_inputs %>%
   ungroup() %>% 
   mutate(
     # Creating age groups consistent with STMF data file 
-    Age_Int = cut(Age, breaks = c(AGE_CUTS, 999), labels = AGE_INT_LABELS, right = FALSE, include.lowest = FALSE, ordered_result = TRUE)
+    Age_Int = cut(Age, breaks = c(AGE_CUTS[["PRI"]], 999), labels = AGE_LABELS[["PRI"]], right = FALSE, include.lowest = FALSE, ordered_result = TRUE)
   ) -> cov_inputs
 
 # Removing countries with less than 1/2 year of data for 2020 and 1 full year of data for 2021 
 cov_inputs <- cov_inputs %>% 
-              left_join(cov_exposures, by = c("Country", "Sex")) %>% 
+              left_join(cov_exposures_wide, by = c("Country", "Sex")) %>% 
               filter(exposure_2020 > 0.5) %>% 
               filter(exposure_2021 > 0.96)
 
@@ -131,20 +131,20 @@ aggoverage_covdb <- function(data, id, time, age, sex, popdata) {
       ) %>%
       filter(row_number() == 1) %>%
       ungroup() %>%
-      left_join(popdata %>% select(!!id, !!sex, !!age, Population, Age_Lower), by = c(as_string(id), as_string(sex), as_string(age))) %>% 
-      dplyr::select(Country, iso2c, iso3c, PopCode, Year, !!sex, Age_Int = !!age, Age_Lower, Deaths, Population)
+      left_join(popdata %>% select(!!id, !!sex, !!age, Population, Age_Lower, Age_Int_cut), by = c(as_string(id), as_string(sex), as_string(age))) %>% 
+      dplyr::select(Country, iso2c, iso3c, PopCode, Year, !!sex, Age_Int = !!age, Age_Lower, Age_Int_cut, Deaths, Population)
 
 }
 
 # Aggregating cumulative deaths over age and sex
-cov_db <- aggoverage_covdb(cov_inputs, "iso3c", "Year", "Age_Int", "Sex", populations_2020)
+cov_db <- aggoverage_covdb(cov_inputs, "iso3c", "Year", "Age_Int", "Sex", populations_2020_cov)
 
 # Aggregating cumulative deaths over age to get an "all ages" category by sex
 cov_db %>% 
   group_by(iso3c, iso2c, PopCode, Country, Year, Sex) %>% 
   summarize(Deaths = sum(Deaths), 
             Population = sum(Population)) %>% 
-  mutate(Age_Int = "All ages", Age_Lower = NA) %>% 
+  mutate(Age_Int = "All ages", Age_Lower = NA, Age_Int_cut = NA) %>% 
   bind_rows(cov_db) -> cov_db
 
 

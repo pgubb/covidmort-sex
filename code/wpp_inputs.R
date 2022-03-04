@@ -4,10 +4,22 @@ cat("Retreiving and Preparing WPP Population data")
 
 # Downloading World Population Country Codes --------------------------------------------------------
 
-
 wpp_loccodes <- read_csv("data/WPP/WPP_loc_codes.csv") %>% filter(LocTypeName == "Country/Area") %>% select(country_code = LocID, iso3c = ISO3_Code)
 
-# Downloading World Population Prospect Files --------------------------------------------------------
+# Preparing United Kingdom Population Projections (2020) --------------------------------------------------------
+
+ukpop_2020 <- read_csv("data/UK_pop/UK_pop_2020prj.csv") %>% 
+  filter(!is.na(PopCode)) %>% 
+  rename(pop_m = pop_male, pop_f = pop_female, pop_b = pop_total, Age_Lower = Age) %>% 
+  mutate(
+    pop_m = pop_m*1000, pop_f = pop_f*1000, pop_b = pop_b*1000,
+    iso3c = PopCode
+  ) %>% 
+  mutate(iso3c = PopCode) %>% 
+  pivot_longer(cols = starts_with("pop_"), values_to = "Population", names_to = "Sex", names_prefix = "pop_") %>% 
+  select(iso3c, Sex, Age_Lower, Population) 
+
+# Preparing World Population Projections (UN) Files --------------------------------------------------------
 
 data(popM)
 data(popF)
@@ -16,59 +28,70 @@ popM_2020 <- popM %>% select(country_code, name, age, `2020`) %>% rename(pop_m =
 popF_2020 <- popF %>% select(country_code, name, age, `2020`)  %>% rename(pop_f = `2020`)
 
 wpp_2020 <- inner_join(popM_2020, popF_2020, by = c("country_code", "name", "age")) %>% 
-  mutate(
-    pop_m = pop_m*1000, 
-    pop_f = pop_f*1000,
-    pop_b = pop_m + pop_f
-  ) %>% 
-  separate(age, sep = "-", into = c("Age_Lower", "Age_Upper")) %>% 
-  mutate(
-    Age_Lower = str_replace(Age_Lower, "[+]", ""), 
-    Age_Lower = as.numeric(Age_Lower),
-    Age_Int = cut(Age_Lower, breaks = c(AGE_CUTS, 999), labels = AGE_INT_LABELS, right = FALSE, include.lowest = FALSE, ordered_result = TRUE)
-  ) %>% 
-  pivot_longer(cols = starts_with("pop_"), values_to = "Population", names_to = "Sex", names_prefix = "pop_") %>% 
-  group_by(Age_Int) %>%
-  inner_join(wpp_loccodes, by = c("country_code")) %>% 
-  select(iso3c, Sex, Age_Lower, Age_Int, Population) 
+            inner_join(wpp_loccodes, by = c("country_code")) %>% 
+              mutate(
+               pop_m = pop_m*1000, 
+               pop_f = pop_f*1000,
+               pop_b = pop_m + pop_f
+             ) %>% 
+              separate(age, sep = "-", into = c("Age_Lower", "Age_Upper")) %>% 
+             mutate(
+              Age_Lower = str_replace(Age_Lower, "[+]", ""), 
+              Age_Lower = as.numeric(Age_Lower)
+            ) %>% 
+            pivot_longer(cols = starts_with("pop_"), values_to = "Population", names_to = "Sex", names_prefix = "pop_") %>% 
+            select(iso3c, Sex, Age_Lower, Population) %>% 
+            bind_rows(ukpop_2020)
+  
+# Function to prepare WPP population counts for desired countries and age groups 
 
-# Downloading United Kingdom Population Projections (2020) --------------------------------------------------------
+wpp_prep <- function(cut_selection, data, age_cuts, age_labels, all = FALSE, custom_iso = NULL) { 
+  
+  if(!all) {
+  iso_selection <- if (cut_selection == "PRI") { 
+                       c(STMF_COUNTRIES_ISO3C, "USA", "PHL", "MEX", "COL", "PER")
+                    } else if (cut_selection == "SEC") { 
+                       c("GBRTENW", "AUS")
+                    } else { 
+                      cut_selection  
+                    }
+  } else {
+  iso_selection <- unique(data$iso3c)
+  } 
+  
+  if (!is.null(custom_iso)) { 
+    iso_selection = custom_iso
+  }
+  
+  data %>% 
+    filter(iso3c %in% iso_selection) %>% 
+    mutate(
+      Age_Int = cut(Age_Lower, breaks = c(age_cuts[[cut_selection]], 999), labels = age_labels[[cut_selection]], right = FALSE, include.lowest = FALSE, ordered_result = TRUE), 
+      Age_Int = as.character(Age_Int), 
+      Age_Int_cut = cut_selection
+    ) %>% 
+    group_by(Age_Int) %>% 
+    mutate(Age_Lower = min(Age_Lower)) %>% 
+    group_by(iso3c, Sex, Age_Lower, Age_Int, Age_Int_cut) %>% 
+    summarize(Population = sum(Population)) %>% 
+    ungroup()
+  
+  }
 
-ukpop_2020 <- read_csv("data/UK_pop/UK_pop_2020prj.csv") %>% 
-  filter(!is.na(PopCode)) %>% 
-  rename(pop_m = pop_male, pop_f = pop_female, pop_b = pop_total, Age_Lower = Age) %>% 
-  mutate(
-    pop_m = pop_m*1000, pop_f = pop_f*1000, pop_b = pop_b*1000,
-    iso3c = PopCode,
-    Age_Int = cut(Age_Lower, breaks = c(AGE_CUTS, 999), labels = AGE_INT_LABELS, right = FALSE, include.lowest = FALSE, ordered_result = TRUE)
-  ) %>% 
-  mutate(iso3c = PopCode) %>% 
-  pivot_longer(cols = starts_with("pop_"), values_to = "Population", names_to = "Sex", names_prefix = "pop_") %>% 
-  select(iso3c, Sex, Age_Lower, Age_Int, Population) 
-
-
-# Creating joint population database by age for 2020  ---------------------
-
-populations_2020 <- bind_rows(wpp_2020, ukpop_2020) %>%
-  group_by(Age_Int) %>% 
-  mutate(Age_Lower = min(Age_Lower)) %>% 
-  group_by(iso3c, Sex, Age_Lower, Age_Int) %>% 
-  summarize(Population = sum(Population)) %>% ungroup() 
-
-
+populations_2020_stmf <- dplyr::bind_rows(map(names(AGE_CUTS), wpp_prep, data = wpp_2020, age_cuts = AGE_CUTS, age_labels = AGE_LABELS)) 
+populations_2020_cov <- wpp_prep(cut_selection = "PRI", data = wpp_2020, age_cuts = AGE_CUTS, age_labels = AGE_LABELS, all = TRUE) 
 
 # Getting age shares of total population by sex for USA for age standardization  ---------------------
 # These will be used in a one to many merge to compute age-standardized mortality rates
 
-popshares_byage_USA <- populations_2020 %>% 
-  filter(iso3c == "USA") %>% 
-  group_by(iso3c, Sex) %>% 
+popUSA_shares <- dplyr::bind_rows(map(names(AGE_CUTS), wpp_prep, data = wpp_2020, age_cuts = AGE_CUTS, age_labels = AGE_LABELS, custom_iso = "USA")) %>% 
+  group_by(iso3c, Age_Int_cut, Sex) %>% 
   mutate(
-    Population = ifelse(Population == 0, 1, Population), 
     popshare_USA = Population/sum(Population)
   ) %>% 
   ungroup() %>%
-  select(Sex, Age_Lower, popshare_USA) 
+  select(Sex, Age_Lower, Age_Int_cut, popshare_USA) 
+
 
 # Calculating the adjustment factor for the open-ended age interval by country and sex ------------
 
