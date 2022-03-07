@@ -42,9 +42,11 @@ read.dbf(path, as.is = TRUE) %>%
   ) %>% select(file_year, sex, ANIO_OCUR, MES_OCURR, DIA_OCURR, Date, Week, EDAD, Age_int, Age, deaths, year)
 }
 
-years <- seq(2015, 2019, 1)
-mex_inegi_md <- dplyr::bind_rows(map(years, ingest_inegi_md)) 
+years <- seq(2015, 2020, 1)
+mex_inegi <- dplyr::bind_rows(map(years, ingest_inegi_md)) 
   
+
+# Official is now available from INEGI through 2020, so will stop using the RENAPO data 
 
 # Loading 2020 deaths from RENAPO -------------------
 mex_renapo <- read_csv("data/MEX/MEX_renapo/mex_exmort_feb12.csv") %>% 
@@ -66,8 +68,8 @@ dim(mex_renapo %>% filter(EDAD == 999))
 
 # Aggregating deaths by year, sex and age -----------------------------------------------
 
-#2015-19
-mex_inegi_md %>% 
+#2015-20
+mex_inegi %>% 
   group_by(year, sex, Age) %>% 
   summarize(
     deaths = sum(deaths, na.rm = TRUE)
@@ -98,7 +100,7 @@ mex_inegi_md %>%
   filter(!is.na(year)) %>% 
   ungroup %>% 
   group_by(year, sex, Age) %>% 
-  summarize(deaths = sum(deaths)) %>% ungroup -> mex_inputs_201519
+  summarize(deaths = sum(deaths)) %>% ungroup -> mex_inegi
 
 #2020
 mex_renapo %>% 
@@ -116,11 +118,11 @@ mex_renapo %>%
   mutate(UNK = max(UNK), 
          dist = deaths/sum(deaths), 
          deaths = deaths + dist*UNK) %>% select(-UNK, - dist) %>% 
-  filter(year == 2020) -> mex_inputs_2020
+  filter(year == 2020) -> mex_renapo
 
 # All years combined
 
-mex_db <- bind_rows(mex_inputs_201519, mex_inputs_2020) %>% 
+mex_db <- mex_inputs %>% 
   mutate(
     iso3c = "MEX", 
     PopCode = "MEX", 

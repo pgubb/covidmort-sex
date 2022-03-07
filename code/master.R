@@ -70,7 +70,7 @@ source("code/stmf_inputs.R")
 # Coverage: 2017-2021
 # --------
 # ECUADOR
-# Source: 
+# Source: INEC (Instituto nacional de estadistica y censo) / Defunciones Generales https://www.ecuadorencifras.gob.ec/defunciones-generales/
 # Coverage: 2017-2021
 #---------
 # BRAZIL
@@ -78,7 +78,8 @@ source("code/stmf_inputs.R")
 # Coverage: 2015-2020
 #---------
 # MEXICO
-# Source: 2015-2019 all cause deaths from INEGI microdata files, 2020 all cause deaths from RENAPO
+# Source: INEGI (2015-2020) Mortalidad. Estadísticas de Defunciones Registradas. https://www.inegi.org.mx/programas/mortalidad/#Microdatos
+# 2021. 2015-2019 all cause deaths from INEGI microdata files, 2020 all cause deaths from RENAPO
 # Coverage: 2015-2020
 #---------
 # PHILIPPINES
