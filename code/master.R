@@ -46,17 +46,17 @@ source("code/packages.R")
 # Loading mapping between country codes and names
 source("code/refs.R")
 
+# Loading and preparing Short Term Mortality Fluctuations data (STMF)
+source("code/stmf_inputs.R")
+
+# Loading and preparing COVerAGE data
+source("code/covdb_inputs.R")
+
 # Loading and preparing population data from UN WPP
 source("code/wpp_inputs.R")
 
 # Loading and preparing population data from World Development Indicators (GNI)
 source("code/wdi_inputs.R")
-
-# Loading and preparing COVerAGE data
-source("code/covdb_inputs.R")
-
-# Loading and preparing Short Term Mortality Fluctuations data (STMF)
-source("code/stmf_inputs.R")
 
 # Loading and preparing data from additional countries: 
 
@@ -66,7 +66,7 @@ source("code/stmf_inputs.R")
 # Coverage: 2015-2020, 2021* (*Provisional and only up to October 2021)
 # --------
 # PERU
-# Source: SINADEF microdata
+# Source: SINADEF microdata: https://www.datosabiertos.gob.pe/dataset/informaci%C3%B3n-de-fallecidos-del-sistema-inform%C3%A1tico-nacional-de-defunciones-sinadef-ministerio
 # Coverage: 2017-2021
 # --------
 # ECUADOR
@@ -78,13 +78,18 @@ source("code/stmf_inputs.R")
 # Coverage: 2015-2020
 #---------
 # MEXICO
-# Source: INEGI (2015-2020) Mortalidad. Estadísticas de Defunciones Registradas. https://www.inegi.org.mx/programas/mortalidad/#Microdatos
-# 2021. 2015-2019 all cause deaths from INEGI microdata files, 2020 all cause deaths from RENAPO
+# Source: INEGI microdata (2015-2020) Mortalidad. Estadísticas de Defunciones Registradas. https://www.inegi.org.mx/programas/mortalidad/#Microdatos
 # Coverage: 2015-2020
 #---------
 # PHILIPPINES
-# Source: SINADEF microdata (2017-2021)
+# Source: Tabulated data from Philippines statistics authority
 # Coverage: 2015-2020
+# 2020:  https://psa.gov.ph/sites/default/files/attachments/crd/specialrelease/3_2020%20Deaths%20Statistical%20Tables_JRV_CRD.xlsx
+# 2019: https://psa.gov.ph/sites/default/files/attachments/crd/specialrelease/SR%20tables%20on%20death%202019_0.xlsx
+# 2018: https://psa.gov.ph/sites/default/files/attachments/crd/specialrelease/2018%20Death%20Statistical%20Tables.xlsx
+# 2017: https://psa.gov.ph/sites/default/files/attachments/crd/specialrelease/SR%20Death%20Tables%202017.xls
+# 2016: https://psa.gov.ph/sites/default/files/attachments/crd/specialrelease/2016%20Death%20Statistics%20Table%204.xlsx
+# 2015: https://psa.gov.ph/sites/default/files/attachments/crd/specialrelease/Final_%20SR%202015%20Deaths.pdf
 #---------
 # USA
 # Source: CDC WONDER (underlying cause of death) tabulation tool
